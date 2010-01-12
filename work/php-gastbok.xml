@@ -1,0 +1,628 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
+"http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd">
+<chapter>
+  <title>Gästbok i PHP med MySQL</title>
+
+  <para>I det här kapitlet kommer vi gå igenom hur vi skapar en gästbok för
+  webben med programmeringsspråket PHP och databasservern MySQL för lagringen
+  av inläggen.</para>
+
+  <para>Vi behöver en fungerande MySQL-server och webbservern Apache med
+  PHP-stöd. Om vi inte har tillgång till det får vi installera det
+  först.</para>
+
+  <para>Det första vi behöver göra är att tänka till vad det är vi behöver
+  lagra i vår databas. Vi ska skapa en publik gästbok som alla besökare kan
+  skriva i, så vi behöver inte fundera på att skapa någon form av
+  användardatabas med inloggning. Vad vi vill lagra är primärt:</para>
+
+  <para><itemizedlist>
+      <listitem>
+        <para>Inlägget besökaren skriver</para>
+      </listitem>
+
+      <listitem>
+        <para>Besökarens namn</para>
+      </listitem>
+
+      <listitem>
+        <para>Besökarens e-postadress</para>
+      </listitem>
+    </itemizedlist></para>
+
+  <para>Dessutom är det ganska bra att registera vilket datum och vilken tid
+  inlägget gjordes. Om någon postar något elakt kan det vara bra att registera
+  IP-adressen som postade inlägget. Datum, klockslag och IP-adress kan vi
+  lämna till polismyndigheten för att de skall kunna göra en utredning, om
+  någon postar något som bryter mot lagstiftningen.</para>
+
+  <para><itemizedlist>
+      <listitem>
+        <para>Datum och tid</para>
+      </listitem>
+
+      <listitem>
+        <para>IP adress</para>
+      </listitem>
+    </itemizedlist></para>
+
+  <para>Nu har vi kontroll på vad vi behöver lagra i vår databas. Nu är det
+  dags att skapa databasen och tabellen som skall lagra inläggen.</para>
+
+  <section>
+    <title>Skapa databasen</title>
+
+    <para>Vi börjar med att skapa en databas i MySQL om vi inte redan har
+    en:</para>
+
+    <para><screen><prompt>mysql&gt;</prompt> <userinput>CREATE DATABASE mindatabas;</userinput>
+<computeroutput>Query OK, 1 row affected (0.00 sec)</computeroutput></screen><note>
+        <para>I exemplet ovan använder vi namnet
+        <emphasis>mindatabas</emphasis> för databasen, det skulle kanske vara
+        lämpligare att använda namnet <emphasis>gastbok</emphasis> på den. Vi
+        kan välja nästan vilket namn som helst.</para>
+      </note>Nu skall vi använda vår databas för att skapa en tabell i
+    den:</para>
+
+    <para><screen><prompt>mysql&gt;</prompt> <userinput>USE mindatabas;</userinput>
+<computeroutput>Database changed</computeroutput></screen>Så där, nu har vi en
+    databas som vi kan jobba med. Nu skall vi ta och skapa tabellen som skall
+    lagra våra inlägg i gästboken.</para>
+  </section>
+
+  <section>
+    <title>Skapa tabellen</title>
+
+    <para>Tidigare kom vi fram till att vi vill lagra inlägget, namnet,
+    e-postadressen, datum/tid och IP-adressen. Vilka datatyper bör vi använda
+    för att lagringen av dessa?</para>
+
+    <para>Inlägget kan vara ett ganska långt inlägg. Om vi tittar på
+    datatyperna <command>char</command> och <command>varchar</command> kan de
+    båda rymma max 255 tecken. Detta ger oss ganska lite utrymme att lagra
+    inlägg på. Datatypen <command>text</command> rymmer 65,000 tecken och
+    passar oss bättre.</para>
+
+    <para>För att lagra namnet och e-postadressen som kan vara ganska korta
+    och sällan är mycket långa väljer vi datatypen <command>varchar</command>
+    och begränsar längden till 100 tecken.</para>
+
+    <para>Datum och tid kan vi lagra på flera olika sätt. Ett sätt skulle
+    kunna vara att lagra det som ett heltal som representerar UNIX-tid. Det är
+    ganska enkelt och vi kan göra en del roliga saker med det. Trots detta
+    väljer vi datatypen <command>timestamp</command>, eftersom den är gjord
+    för just det ändamål vi vill uppnå - att lagra datum och tid i
+    databaser.</para>
+
+    <para>IP-adresser ser ut ungefär så här: <code>123.123.123.123</code>. Vi
+    kan snabbt räkna ut att det är tolv (12) siffror och tre (3) punkter i en
+    IP-adress. Totalt blir det 12+3 = 15 tecken. För att lagra IP-adressen
+    väljer vi datatypen <command>char</command> och begränsar den till 15
+    tecken.</para>
+
+    <para>Nu har vi kommit fram till vilka datatyper vi behöver använda i vår
+    tabell. Innan vi skapar tabellen skall vi fundera på om det inte vore bra
+    att använda ett fält i tabellen som enbart innehåller en räknare, som ökas
+    med ett (1) för varje post vi lagrar i tabellen. Denna räknare kan vara
+    mycket användbar när vi kommer så långt så att vi skall börja redigera
+    inlägg eller kanske rent av ta bort inlägg i databasen. Vi behöver ett
+    heltal som ökar med ett (1) för varje post som lagras och använder därför
+    datatypen <command>int</command> tillsammans med
+    <command>auto_increment</command> och sätter fältet som primärnyckel,
+    <command>primary key</command>.</para>
+
+    <para>Dags att sätta ihop allt och skapa tabellen i databasen:</para>
+
+    <para><screen><prompt>mysql&gt;</prompt> <userinput>CREATE TABLE gastbok(id INT AUTO_INCREMENT PRIMARY KEY, inlagg TEXT, namn VARCHAR(100), epost VARCHAR(100), datum TIMESTAMP, ip_addr CHAR(15));</userinput>
+<computeroutput>Query OK, 0 rows affected (0.05 sec)</computeroutput>
+</screen>Databasen är skapad och en tabell har vi. Vi kikar på hur den ser ut
+    med:</para>
+
+    <para><screen><prompt>mysql&gt;</prompt> <userinput>DESCRIBE gastbok;</userinput>
+<computeroutput>+---------+--------------+------+-----+-------------------+----------------+ 
+| Field   | Type         | Null | Key | Default           | Extra          | 
++---------+--------------+------+-----+-------------------+----------------+ 
+| id      | int(11)      | NO   | PRI | NULL              | auto_increment | 
+| inlagg  | text         | YES  |     | NULL              |                | 
+| namn    | varchar(100) | YES  |     | NULL              |                | 
+| epost   | varchar(100) | YES  |     | NULL              |                | 
+| datum   | timestamp    | NO   |     | CURRENT_TIMESTAMP |                | 
+| ip_addr | char(15)     | YES  |     | NULL              |                | 
++---------+--------------+------+-----+-------------------+----------------+ 
+6 rows in set (0.00 sec) 
+</computeroutput></screen><note>
+        <para>Om din tabell inte ser lika <emphasis>rak</emphasis> ut i
+        kanterna gör det inget. Det är ditt teckensnitt som skapar den
+        effekten och det påverkar inte databasen alls.</para>
+      </note>Allt är klart med databasen. Nu är det dags att börja skapa
+    applikationen som skall hantera vår gästbok. Vi behöver inte lagra något i
+    databasen ännu, det är ju det vår gästbok skall göra åt oss.</para>
+  </section>
+
+  <section>
+    <title>Börja med PHP</title>
+
+    <para>Vi kör igång direkt med lite grunder. En PHP-applikation är en
+    vanlig textfil som kan skapas i vilken texteditor som helst. PHP-filer bör
+    ha (men måste inte alltid) ha filändelsen <filename
+    class="extension">.php</filename> , till exempel
+    <filename>hello.php</filename>. Ett enkelt PHP-program kan se ut så
+    här:</para>
+
+    <para><programlisting>&lt;?php
+  echo "Hello PHP";
+?&gt;</programlisting><code>&lt;?php</code> anger att här börjar PHP-kod och
+    <code>?&gt;</code> anger att här slutar PHP. Allt mellan de taggarna
+    kommer tolkas som PHP-kod. Kommandot <command>echo</command> skriver ut
+    strängen som kommer efter echo. Exemplet ovanför kommer skriva ut
+    <computeroutput>Hello PHP</computeroutput> och inte göra speciellt mycket
+    mer.</para>
+
+    <para>Spara filen som <filename>hello.php</filename> och kör den genom din
+    webbläsare.</para>
+  </section>
+
+  <section>
+    <title>Skapa formuläret</title>
+
+    <para>Så var det dags att börja skapa gästboken. Vi skriver ett formulär i
+    HTML där användaren kommer kunna skriva in sitt inlägg, sitt namn och
+    e-postadress. <emphasis>Vi bryr oss inte alls om utseendet på gästboken,
+    det viktiga i vårt skapande är att få webbsidan kopplad till databasen med
+    hjälp av PHP – inte att skapa en vacker gästbok.</emphasis></para>
+
+    <para>Skriv in följande i en texteditor och spara filen som
+    <filename>gastbok.php</filename> i din webbkatalog:</para>
+
+    <para><programlisting>&lt;form method="post" action="gastbok.php"&gt;
+Ditt namn: &lt;input type="text" name="namn" /&gt;&lt;br /&gt;
+Din e-postadress: &lt;input type="text" name="epost" /&gt;&lt;br /&gt;
+Din kommentar: &lt;textarea name="inlagg" &gt;&lt;/textarea&gt;&lt;br /&gt;
+&lt;input type="submit" name="nyKommentar" value="Posta" /&gt;
+&lt;/form&gt;
+</programlisting><note>
+        <para>Detta är inte giltig HTML, men det bryr vi oss inte om just
+        nu.</para>
+      </note><command>&lt;form ...&gt;</command> anger vilken metod vi vill
+    använda för att skicka information från formuläret till webbsidan. Vi kan
+    använda POST eller GET. Vi väljer att använda POST. Inmatningsfälten
+    skapar vi med <command>input</command>-taggen och textrutan för inlägget
+    skapas med en textarea. Input och <command>textarea</command> namnger vi
+    med attibutet <command>name</command>, så vi kan fånga upp rätt fält när
+    vi skall lagra informationen i databasen.</para>
+
+    <para>Prova nu att komma åt formuläret med din webbläsare, för att se att
+    det fungerar.</para>
+  </section>
+
+  <section>
+    <title>Fånga upp det användaren matar in i formuläret</title>
+
+    <para>När vi postar formuläret laddas sidan om och inget händer, det är
+    för att vi inte fångar upp det som postats i formuläret. Vi behöver styra
+    detta lite grann och vi lägger till följande ovanför formuläret i filen
+    <filename>gastbok.php</filename>:</para>
+
+    <para><programlisting>&lt;?php
+  echo "Ditt namn är: ".$_POST['namn']."&lt;br /&gt;";
+  echo "Din e-postadress är: ".$_POST['epost']."&lt;br /&gt;";
+  echo "Ditt inlägg är: ".$_POST['inlagg'];
+?&gt;</programlisting>Om vi fyller i formulärets fält och postar det (genom
+    att klicka på knappen Posta) kommer sidan skriva ut det vi skrivit i
+    formuläret. Om vi laddar sidan utan att fylla i något kommer vi få
+    felmeddelanden om att index är odefinerade (detta beror lite grann på hur
+    PHP är konfigurerad på din dator). Felmeddelanden får vi för att vi
+    försöker använda variabler ($_POST) som inte är satta.</para>
+
+    <para><note>
+        <para>Lägg märke till hur vi använder samma namn i $_POST som vi gör i
+        formuläret.</para>
+      </note>I formuläret står det:</para>
+
+    <para><programlisting>Ditt namn: &lt;input type="text" name="namn" /&gt;&lt;br /&gt;</programlisting>Vi
+    fångar upp inmatningen i fältet med PHP-koden:</para>
+
+    <para><programlisting>echo "Ditt namn är: ".$_POST['namn']."&lt;br /&gt;";</programlisting>Det
+    innebär att vi måste hålla koll på vad vi anger för namn i
+    inmatningsfälten (input/textarea) i formuläret så vi kan fånga upp dem med
+    $_POST. Om vi istället skulle använda method=”get” för forumläret skulle
+    vi fånga upp inmatningarna med $_GET på samma sätt som vi gör för
+    $_POST.</para>
+
+    <para>För att ordna detta med felmeddelanden skriver vi om PHP-koden så
+    den ser ut så här:</para>
+
+    <para><programlisting>&lt;?php
+  if(isset($_POST['nyKommentar'])) {
+    echo "Ditt namn är: ".$_POST['namn']."&lt;br /&gt;";
+    echo "Din e-postadress är: ".$_POST['epost']."&lt;br /&gt;";
+    echo "Ditt inlägg är: ".$_POST['inlagg'];
+  }
+?&gt;</programlisting>Allt är frid och fröjd. Vi publicerar ett formulär för
+    våra besökare och vi kan fånga upp vad de matar in och skriver ut det på
+    sidan. Nu skall vi titta på hur vi ansluter vår applikation till den
+    MySQL-databas vi skapade tidigare för att lagra inläggen i vår
+    gästbok.</para>
+  </section>
+
+  <section>
+    <title>Koppla applikationen till MySQL</title>
+
+    <para>För att kunna ansluta en PHP-applikation till MySQL-servern behöver
+    vi två funktioner: <function>mysql_connect()</function> och
+    <function>mysql_select_db()</function>.
+    <function>mysql_connect()</function> använder vi för att skapa en koppling
+    till MySQL-servern och <function>mysql_select_db()</function> använder vi
+    för att välja vilken databas vi vill arbeta mot på MySQL-servern.</para>
+
+    <para><function>mysql_connect()</function> tar tre argument: vilken
+    server, vilken användare och lösenordet till den användaren. Om vi arbetar
+    mot en lokal MySQL-server (den är installerad på samma dator som
+    webbservern) är det enklast att ange IP-adressen 127.0.0.1 som server.
+    Användarnamnet och lösenordet är det användarnamn och lösenord vi använder
+    för att ansluta till MySQL-servern. Säg att vi har en standardinstallation
+    av MySQL och inte har satt något lösenord själv, då är vårt användarnamn
+    root med ett tomt lösenord. Vår anslutning från PHP skulle då se ut så
+    här:</para>
+
+    <para><programlisting>mysql_connect( "127.0.0.1", "root", "" );</programlisting>Vad
+    händer om vi inte kan ansluta till servern? Då kommer vi få ett
+    felmeddelande från PHP som kanske inte är så snyggt, så vi skapar ett eget
+    felmeddelande, med hjälp av felhantering så här:</para>
+
+    <para><programlisting>mysql_connect( "127.0.0.1", "root", "" ) or die( "Kunde inte ansluta till databasservern!" );</programlisting>Om
+    vi inte kan ansluta till databasservern kommer användaren få
+    felmeddelandet <computeroutput>Kunde inte ansluta till
+    databasservern!</computeroutput> på vår sida. Resten av applikationen
+    kommer inte köras, då <function>die()</function> gör att PHP-applikationen
+    avslutas. Om PHP är konfigurerad att visa felmeddelanden kommer vi trots
+    <code>or die()</code> att få felmeddelanden från PHP. Dessa kan vi få bort
+    genom att lägga till ett @-tecken innan
+    <function>mysql_connect</function>:</para>
+
+    <para><programlisting>@mysql_connect( "127.0.0.1", "root", "" ) or die( "Kunde inte ansluta till databasservern!" );</programlisting><note>
+        <para>Det är inte lämpligt att använda användarnamnet root med ett
+        tomt lösenord om vi publicerar vår applikation på webben! </para>
+      </note>Då var anslutningen till MySQL-servern avklarad, nu skall vi
+    berätta för den vilken databas vi vill arbeta med. Vi skapade tidigare en
+    databas som vi döpte till <emphasis>mindatabas</emphasis>, vi väljer
+    den:</para>
+
+    <para><programlisting>mysql_select_db( "mindatabas" );</programlisting>Och
+    precis som med <function>mysql_connect()</function> behöver vi ha
+    felhantering, om PHP-applikationen inte kan välja vår databas, så vi
+    lägger till <code>or die()</code>: </para>
+
+    <para><programlisting>mysql_select_db( "mindatabas" ) or die( "Kunde inte välja databas!" );</programlisting>Nu
+    är det dags att lägga in detta i gastbok.php så vi får med det i vår
+    applikation. Vi lägger in det ovanför <emphasis>if-satsen</emphasis> vi
+    skapade tidigare:</para>
+
+    <para><programlisting>&lt;?php
+  @mysql_connect( "127.0.0.1", "root", "" ) or die( "Kunde inte ansluta till databasservern!" );
+  mysql_select_db( "mindatabas" ) or die( "Kunde inte välja databas!" );	
+
+  if(isset($_POST['nyKommentar'])) {
+    echo "Ditt namn är: ".$_POST['namn']."&lt;br /&gt;";
+    echo "Din e-postadress är: ".$_POST['epost']."&lt;br /&gt;";
+    echo "Ditt inlägg är: ".$_POST['inlagg'];
+  }
+?&gt;</programlisting><note>
+        <para>Formuläret skall forfarande vara kvar i filen, även om vi inte
+        visar det här ovanför!</para>
+      </note></para>
+  </section>
+
+  <section>
+    <title>Se till att data är säker att lagra i databasen</title>
+
+    <para>Innan vi börjar lagra data som matas in från formuläret bör vi
+    fundera på vad vi egentligen gör. När vi tillåter en okänd användare (en
+    gästbok publicerad på Internet är en osäker applikation) öppnar vi upp för
+    sårbarheter i vår applikation. En användare kan till exempel skicka in
+    SQL-kommandon genom formulärfälten och på så vis till exempel köra en
+    <command>DROP TABLE gastbok;</command> för att radera hela vår gästbok
+    inklusive lagrad data. Det vill vi inte, eller hur?</para>
+
+    <para>Utan att gå in på detaljer hur det fungerar kan vi konstatera att vi
+    behöver skydda oss från detta. I PHP finns funktionerna
+    <function>mysql_real_escape_string()</function> och
+    <function>addslashes()</function> som hjälper oss med detta. Funktionerna
+    <emphasis>escape:ar</emphasis> farliga tecken, som kan användas för att
+    skicka in SQL-kommandon till databasen. I praktiken gör den om ett
+    '-tecken till \', och ” till \” med mera. \-tecknet (backslash) kallas
+    escapetecken och gör att databasen skall tolka tecknet som ett vanligt
+    tecken och inte som ett kommandotecken.</para>
+
+    <para>Nu skall vi se hur vi skall lösa detta.</para>
+
+    <para><programlisting>&lt;?php
+  @mysql_connect( "127.0.0.1", "root", "" ) or die( "Kunde inte ansluta till databasservern!" );
+  mysql_select_db( "mindatabas" ) or die( "Kunde inte välja databas!" );	
+
+  if(isset($_POST['nyKommentar'])) {
+    $namn = mysql_real_escape_string( $_POST['namn'] );
+    $epost = mysql_real_escape_string( $_POST['epost'] );
+    $inlagg = mysql_real_escape_string( $_POST['inlagg'] );
+    echo "Ditt namn är: ".$namn."&lt;br /&gt;";
+    echo "Din e-postadress är: ".$epost."&lt;br /&gt;";
+    echo "Ditt inlägg är: ".$inlagg;
+  }
+?&gt;
+&lt;form method="post" action="gastbok.php"&gt;
+Ditt namn: &lt;input type="text" name="namn" /&gt;&lt;br /&gt;
+Din e-postadress: &lt;input type="text" name="epost" /&gt;&lt;br /&gt;
+Din kommentar: &lt;textarea name="inlagg" &gt;&lt;/textarea&gt;&lt;br /&gt;
+&lt;input type="submit" name="nyKommentar" value="Posta" /&gt;
+&lt;/form&gt;</programlisting>Så där, vi lade till tre (3) rader innan
+    <code>echo</code>-raderna. Vi ändrade också variabeln vi vill skriva ut
+    från <code>$_POST</code> till de vi skapar med
+    <function>mysql_real_escape_string()</function>-funktionen. Än så länge är
+    det ingen större skillnad från innan, men vi kan testa vår applikation
+    genom att fylla i ”- och '-tecken i formulärfälten. Vi kommer få tillbaka
+    dem som \” och \'.</para>
+  </section>
+
+  <section>
+    <title>Lagra data från formuläret i databasen</title>
+
+    <para>Nu är det dags att lagra den data vi får via formuläret i databasen.
+    Det är egentligen bara en funktion vi behöver:
+    <function>mysql_query()</function> . Men vi väljer att dela upp lagringen
+    i två delar: först skapar vi SQL-frågan i en variabel som vi döper till
+    <varname>$sql</varname> och sedan anropar vi funktionen
+    <function>mysql_query()</function>.</para>
+
+    <para><programlisting>$sql = ”INSERT INTO gastbok(inlagg, namn, epost) VALUES('”.$inlagg.”','”.$namn.”','”.$epost.”')”;
+mysql_query($sql);</programlisting>Vi avslutar inte våra SQL-frågor med ett
+    semikolon-tecken (<literal>;</literal>) när vi använder oss av
+    <function>mysql_query()</function> som vi gör när vi använder den vanliga
+    MySQL-klienten (<command>mysql</command>). Funktionen tar hand om det åt
+    oss.</para>
+
+    <para><programlisting>&lt;?php
+  @mysql_connect( "127.0.0.1", "root", "" ) or die( "Kunde inte ansluta till databasservern!" );
+  mysql_select_db( "mindatabas" ) or die( "Kunde inte välja databas!" );	
+
+  if(isset($_POST['nyKommentar'])) {
+    $namn = mysql_real_escape_string( $_POST['namn'] );
+    $epost = mysql_real_escape_string( $_POST['epost'] );
+    $inlagg = mysql_real_escape_string( $_POST['inlagg'] );
+    echo "Ditt namn är: ".$namn."&lt;br /&gt;";
+    echo "Din e-postadress är: ".$epost."&lt;br /&gt;";
+    echo "Ditt inlägg är: ".$inlagg;
+    $sql = ”INSERT INTO gastbok(inlagg, namn, epost) VALUES('”.$inlagg.”','”.$namn.”','”.$epost.”')”;
+    mysql_query($sql);
+  }
+?&gt;</programlisting><note>
+        <para>För att spara plats på pappret har vi valt att inte visa
+        formuläret i ovanstående listning.</para>
+      </note>Om vi nu testar vår applikation genom webbläsaren och postar data
+    i formuläret kommer det att lagras i databasen. Detta kan vi verifiera
+    genom att logga in i databasservern och kontrollera genom att skriva
+    <command>SELECT * FROM gastbok;</command> . Glöm inte att välja databas
+    först med <command>USE mindatabas;</command> . Datum och tid när inlägget
+    postades uppdaterades automatiskt eftersom vi använder
+    <constant>CURRENT_TIMESTAMP</constant> på fältet datum.</para>
+
+    <para>Vi hade som krav att applikationen skulle lagra IP-adressen
+    besökaren har, så vi har en möjlighet att spåra användaren om hon skriver
+    något olagligt eller dumt. Hur löser vi detta? I PHP finns en speciell
+    indexerad variabel som heter <varname>$_SERVER</varname>, den innehåller
+    en del information – bland annat IP adressen till besökaren.</para>
+
+    <para>Vi använder oss av följande PHP-kod:</para>
+
+    <para><programlisting>$ip = $_SERVER['REMOTE_ADDR'];</programlisting>Nu
+    kommer variablen <varname>$ip</varname> innehålla besökarens IP-adress.
+    För att lagra den i datbasen ändrar vi på raden med <code>$sql =</code>
+    till:</para>
+
+    <para><programlisting>$sql = ”INSERT INTO gastbok(inlagg, namn, epost, ip_addr) VALUES('”.$inlagg.”','”.$namn.”','”.$epost.”','”.$ip.”')”;</programlisting>Applikationskoden
+    skall nu se ut så här:</para>
+
+    <para><programlisting>&lt;?php
+  @mysql_connect( "127.0.0.1", "root", "" ) or die( "Kunde inte ansluta till databasservern!" );
+  mysql_select_db( "mindatabas" ) or die( "Kunde inte välja databas!" );	
+
+  if(isset($_POST['nyKommentar'])) {
+    $namn = mysql_real_escape_string( $_POST['namn'] );
+    $epost = mysql_real_escape_string( $_POST['epost'] );
+    $inlagg = mysql_real_escape_string( $_POST['inlagg'] );
+    $ip = $_SERVER['REMOTE_ADDR'];
+    echo "Ditt namn är: ".$namn."&lt;br /&gt;";
+    echo "Din e-postadress är: ".$epost."&lt;br /&gt;";
+    echo "Ditt inlägg är: ".$inlagg;
+    $sql = ”INSERT INTO gastbok(inlagg, namn, epost, ip_addr) VALUES('”.$inlagg.”','”.$namn.”','”.$epost.”','”.$ip.”')”;
+    mysql_query($sql);
+  }
+?&gt;</programlisting>Nu provar vi att posta ett inlägg till i vår gästbok och
+    ser vad som händer i databasen. IP-adressen bör ha lagrats.</para>
+  </section>
+
+  <section>
+    <title>Hämta data och visa gästboken</title>
+
+    <para>Nu när vi kan lagra inläggen (data) i vår databas är det dags att
+    visa dem också. Under <code>&lt;form&gt; ... &lt;/form&gt;</code> i
+    applikationen skall vi skapa mer PHP-kod. Kod som hämtar inläggen och
+    visar dem. Vi fokuserar på att få ut data från databasen och presentera
+    den, inte på att göra en snygg gästbok. Det är en uppgift vi kan ta tag i
+    senare.</para>
+
+    <para>För att hämta data från databasen med PHP använder vi funktionen
+    <function>mysql_query()</function>, det vill säga – precis samma som för
+    att lagra data. Vi tittar lite snabbt på hur det skulle kunna se
+    ut:</para>
+
+    <para><programlisting>$sql = ”SELECT * FROM gastbok”;
+$q = mysql_query( $sql );</programlisting>Här ser vi en skillnad mot när vi
+    lagrade data med <function>mysql_query()</function> . Vi tilldelar
+    variabeln <varname>$q</varname> det som kan komma tillbaka från vår fråga.
+    Det vill säga de poster vi får tillbaka. Så, vad får vi tillbaka?</para>
+
+    <para>I variabeln <varname>$q</varname> kommer det finnas något som kallas
+    <emphasis>MySQL Resource</emphasis>. Den innehåller de poster från
+    databasen som hämtades med <command>SELECT</command> . Vi kan inte hämta
+    ut data från den direkt utan måste använda oss av funktionen
+    <function>mysql_fetch_array()</function> i PHP.
+    <function>mysql_fetch_array()</function> hämtar nästa tillgängliga post
+    från den fråga vi ställde med <command>SELECT</command>. Vi tilldelar en
+    variabel svaret från <function>mysql_fetch_array()</function> och kan då
+    hämta ut data genom att referera till variabeln och dess index. Ett
+    exempel:</para>
+
+    <para><programlisting>$sql = ”SELECT * FROM gastbok”;
+$q = mysql_query( $sql );
+$r = mysql_fetch_array( $q );</programlisting>Nu kan vi hämta data från
+    databasen med hjälp av variabeln <varname>$r</varname>. För att hämta data
+    från fältet <emphasis>id</emphasis> i databastabellen skriver vi till
+    exempel:</para>
+
+    <para><programlisting>echo $r['id'];</programlisting>Ofta kommer vi få
+    fler än en post som svar efter en SELECT-fråga. Detta gör att vi måste
+    börja fundera på att skapa en <emphasis>loop</emphasis>. En while-loop i
+    PHP är mycket användbar då vi kan bestämma att så länge det finns något
+    kvar att hämta skall vi hämta det och skriva ut det på webbsidan. Då
+    skriver vi så här:</para>
+
+    <para><programlisting>while( $r = mysql_fetch_array( $q ) ) {
+  echo $r['id'];
+}</programlisting>Så länge det finns poster kvar att hämta, hämtar vi dem och
+    skriver ut fältet id från posten.</para>
+
+    <para>Skall vi försöka skapa lite PHP som vi kan använda i vår gästbok nu?
+    Vi hoppar ner till raden under <code>&lt;/form&gt;</code> och skriver in
+    följande:</para>
+
+    <para><programlisting>&lt;?php
+  $sql = “SELECT * FROM gastbok”;
+  $q = mysql_query( $sql );
+
+  while( $r = mysql_fetch_array( $q ) ) {
+    echo “Namn: “.$r['namn'].”&lt;br /&gt;”;
+    echo “E-post: “.$r['epost'].”&lt;br /&gt;”;
+    echo “IP-adress: “.$r['ip_addr'].”&lt;br /&gt;”;
+    echo “Inlägg: “.$r['inlagg'].”&lt;br /&gt;”;
+    echo “&lt;hr /&gt;”;
+  }
+?&gt;</programlisting>Nu visas alla inläggen vi har i gästboken under
+    formuläret på sidan. Har vi lagrat inläggen med mysql_real_escape_string()
+    kommer vi se att det finns en del \-tecken med i texten. För att ta bort
+    dem när vi presenterar inläggen använder vi oss av funktionen
+    stripslashes():</para>
+
+    <para><programlisting>&lt;?php
+  $sql = “SELECT * FROM gastbok”;
+  $q = mysql_query( $sql );
+
+  while( $r = mysql_fetch_array( $q ) ) {
+    echo “Namn: “.stripslashes( $r['namn'] ).”&lt;br /&gt;”;
+    echo “E-post: “.stripslashes( $r['epost'] ).”&lt;br /&gt;”;
+    echo “IP-adress: “.stripslashes( $r['ip_addr'] ).”&lt;br /&gt;”;
+    echo “Inlägg: “.stripslashes( $r['inlagg'] ).”&lt;br /&gt;”;
+    echo “&lt;hr /&gt;”;
+  }
+?&gt;</programlisting>Vi skall lägga till lite felhantering, om vi inte har
+    några inlägg i gästboken kommer besökaren få ett felmeddelande och det är
+    snyggare om vi själva skapar meddelandet. För att kunna kontrollera det
+    här använder vi oss av funktionen <function>mysql_num_rows()</function>
+    som berättar för oss hur många poster vi får tillbaka från
+    <function>mysql_query()</function>. Om vi får tillbaka fler än noll (0)
+    har vi något att visa, vi skriver om vår kod lite grann, så den anpassas
+    för detta:</para>
+
+    <para><programlisting>&lt;?php
+  $sql = “SELECT * FROM gastbok”;
+  $q = mysql_query( $sql );
+
+  if( mysql_num_rows( $q ) &gt; 0 ) {
+    while( $r = mysql_fetch_array( $q ) ) {
+      echo “Namn: “.stripslashes( $r['namn'] ).”&lt;br /&gt;”;
+      echo “E-post: “.stripslashes( $r['epost'] ).”&lt;br /&gt;”;
+      echo “IP-adress: “.stripslashes( $r['ip_addr'] ).”&lt;br /&gt;”;
+      echo “Inlägg: “.stripslashes( $r['inlagg'] ).”&lt;br /&gt;”;
+      echo “&lt;hr /&gt;”;
+    }
+  } else {
+    echo “Gästboken är tom.”;
+  }
+?&gt;</programlisting>Vi lade till en <emphasis>if-sats</emphasis> där vi
+    kontrollerar om vi får tillbaka fler än noll poster. Om vi får en eller
+    flera kommer vi skriva ut dem, om vi inte får tillbaka något
+    (<command>else</command>) kommer vi skriva ut texten
+    <computeroutput>Gästboken är tom.</computeroutput></para>
+
+    <para>Vart efter vi får in nya inlägg i vår gästbok kommer vi upptäcka att
+    det vore smidigare att få de senaste inläggen överst, istället för underst
+    som nu. Vi gör en enkel justering i <code>$sql =</code> raden:</para>
+
+    <para><programlisting>$sql = “SELECT * FROM gastbok ORDER BY datum DESC”;</programlisting>Nu
+    är gästboken klar, efter de mål vi satte upp i början. Din uppgift nu är
+    att bygga vidare på gästboken så den passar dina behov. Idéer på vad som
+    kan göras:</para>
+
+    <para><itemizedlist>
+        <listitem>
+          <para>En mer grafiskt tilltalande sida.</para>
+        </listitem>
+
+        <listitem>
+          <para>En funktion för att ta bort inlägg.</para>
+        </listitem>
+
+        <listitem>
+          <para>Låta besökaren välja om hon vill sortera inläggen fallande
+          eller stigande i datumordning.</para>
+        </listitem>
+
+        <listitem>
+          <para>Visa inläggen på ett snyggare sätt, där namnet blir en länk
+          som gör att man kan skicka e-post.</para>
+        </listitem>
+      </itemizedlist></para>
+  </section>
+
+  <section>
+    <title>Applikationen i sin helhet</title>
+
+    <para><programlisting>&lt;?php
+  @mysql_connect( "127.0.0.1", "root", "" ) or die( "Kunde inte ansluta till databasservern!" );
+  mysql_select_db( "mindatabas" ) or die( "Kunde inte välja databas!" );	
+
+  if(isset($_POST['nyKommentar'])) {
+    $namn = mysql_real_escape_string( $_POST['namn'] );
+    $epost = mysql_real_escape_string( $_POST['epost'] );
+    $inlagg = mysql_real_escape_string( $_POST['inlagg'] );
+    $ip = $_SERVER['REMOTE_ADDR'];
+    $sql = ”INSERT INTO gastbok(inlagg, namn, epost, ip_addr) VALUES('”.$inlagg.”','”.$namn.”','”.$epost.”','”.$ip.”')”;
+    mysql_query($sql);
+  }
+?&gt;
+
+&lt;form method="post" action="gastbok.php"&gt;
+Ditt namn: &lt;input type="text" name="namn" /&gt;&lt;br /&gt;
+Din e-postadress: &lt;input type="text" name="epost" /&gt;&lt;br /&gt;
+Din kommentar: &lt;textarea name="inlagg" &gt;&lt;/textarea&gt;&lt;br /&gt;
+&lt;input type="submit" name="nyKommentar" value="Posta" /&gt;
+&lt;/form&gt;
+
+&lt;?php
+  $sql = “SELECT * FROM gastbok ORDER BY datum DESC”;
+  $q = mysql_query( $sql );
+
+  if( mysql_num_rows( $q ) &gt; 0 ) {
+    while( $r = mysql_fetch_array( $q ) ) {
+      echo “Namn: “.stripslashes( $r['namn'] ).”&lt;br /&gt;”;
+      echo “E-post: “.stripslashes( $r['epost'] ).”&lt;br /&gt;”;
+      echo “IP-adress: “.stripslashes( $r['ip_addr'] ).”&lt;br /&gt;”;
+      echo “Inlägg: “.stripslashes( $r['inlagg'] ).”&lt;br /&gt;”;
+      echo “&lt;hr /&gt;”;
+    }
+  } else {
+    echo “Gästboken är tom.”;
+  }
+?&gt;</programlisting></para>
+  </section>
+</chapter>
